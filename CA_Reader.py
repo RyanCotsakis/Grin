@@ -17,6 +17,10 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
 
 
+#system args
+COM = sys.argv[1] #com port number
+serialNumber = sys.argv[2] #battery serial number
+
 #final vars
 VscaleJump = 10 #voltage scale goes from 0 to (max voltage rounded up to nearest Iscalejump)
 IscaleJump = 1
@@ -39,18 +43,17 @@ mouseLoc = [0,0] #x,y of mouse location when held click
 scroll = [False,False,False,False,0] #up, down, left, right being held; time when pushed
 ahAxes = [False] #amp hour axes? Or time axes?
 
-print "Enter COM port number:"
-sys.stdout.flush()
-COMport = raw_input()
 try:
-	int(COMport)
-	COMport = "COM" + COMport
+	ca = serial.Serial(
+		    port=COM,
+		    baudrate=9600,
+		    parity=serial.PARITY_NONE,
+		    stopbits=serial.STOPBITS_ONE,
+		    bytesize=serial.EIGHTBITS
+		)
+	ca.isOpen()
 except:
-	"do nothing"
-
-print "Enter battery serial number:"
-sys.stdout.flush()
-serialNumber = raw_input()
+	raise Exception(sys.argv[1] + " unavailable.")
 
 print "" #new line
 
@@ -63,7 +66,7 @@ ES_CONTINUOUS = 0x80000000
 ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
 
 #matplotlib
-fig = plt.figure()
+fig = plt.figure(serialNumber)
 Vgraph = fig.add_subplot(111)
 Igraph = Vgraph.twinx()
 
@@ -186,31 +189,19 @@ bxaxis.on_clicked(xaxis)
 def startFile():
 	global f
 	f = open(serialNumber + ".txt",'w')
-
-	print header_string
-	sys.stdout.flush()
 	f.write(header_string + "\n")
-
 	return f
 
 def timeOutProcess():
 	print "\nPAUSED. No data to CA for " + str(timeOut) + " seconds.\n"
-	sys.stdout.flush()
+	try:
+		sys.stdout.flush()
+	except:
+		"don't print"
 	paused[0] = True
 	paused[1] = time.time() - timeOut
 
 def readCA():
-	try:
-		ca = serial.Serial(
-		    port=COMport,
-		    baudrate=9600,
-		    parity=serial.PARITY_NONE,
-		    stopbits=serial.STOPBITS_ONE,
-		    bytesize=serial.EIGHTBITS
-		)
-		ca.isOpen()
-	except:
-		raise Exception("COM Port: '" + COMport + "' unavailable")
 
 	f = startFile()
 	prevTime = time.time()
@@ -240,7 +231,6 @@ def readCA():
 				while mins >= 60:
 					hours += 1
 					mins -= 60
-					sys.stdout.flush()
 				length = len(times)
 				if hours > 0:
 					string = "%i:%02i:%04.1f" %(hours,mins,secs)
@@ -248,9 +238,15 @@ def readCA():
 					string = "%02i:%04.1f\t" %(mins,secs)
 				string += "\t%.2f\t\t%.2f\t\t%.1f\t\t%.2f\t%.2f" %(voltage,current,wattHours[length-1],ampHours[length-1],CAah)
 				print string
-				sys.stdout.flush()
-				f.write(string + "\n")
-				f.flush()
+				try:
+					sys.stdout.flush()
+				except:
+					"don't print"
+				try:
+					f.write(string + "\n")
+					f.flush()
+				except:
+					break
 
 			#plot
 			try:
