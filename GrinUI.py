@@ -62,6 +62,8 @@ class UserInterface(Frame):
 				newVar = StringVar()
 				stats.append(newVar)
 				newVar.set("")
+				if i == 0:
+					newVar.set("Launching...")
 			thread.start_new_thread(self.displayStats,(process,serNum,stats))
 			self.processes += 1
 			Button(text = stats[0], command = lambda: self.bringToFront(serNum)).grid(row = 3+self.processes, column = 0)
@@ -109,6 +111,8 @@ class UserInterface(Frame):
 			if goodCom:
 				self.itemsInMenu+=1
 				self.comMenu.add_command(label = COMport, command = partial(self.selectCom,COMport))
+		if self.itemsInMenu == 0:
+			self.comMenu.add_command(label = "No COM Ports Found")
 
 	def displayStats(self, process, serial, out):
 		while process.poll() is None:
