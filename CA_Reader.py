@@ -1,3 +1,12 @@
+"""
+CA_Reader.py
+
+This script reads data from a Cycle Analyst and displays it on an interactive plot.
+
+Author: Ryan Cotsakis, GRIN TECH
+
+"""
+
 import serial
 import sys
 import os
@@ -193,7 +202,7 @@ def startFile():
 	return f
 
 def timeOutProcess():
-	print "\nPAUSED. No data to CA for " + str(timeOut) + " seconds.\n"
+	print "\nPAUSED. " + str(timeOut) + " second timeout.\n"
 	try:
 		sys.stdout.flush()
 	except:
@@ -272,7 +281,7 @@ def readCA():
 try:
    CAthr = thread.start_new_thread(readCA,())
 except:
-   print "Error: unable to start thread"
+   raise Exception("Unable to start readCA thread.")
 
 
 #MATPLOTLIB ACTION HANDLING
