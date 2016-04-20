@@ -81,7 +81,6 @@ Igraph = Vgraph.twinx()
 
 startTime = [time.time()] #start time at 0, global modifiable variable (not actually a list)
 
-
 #make pdf
 def pdf(filename):
 	doc = SimpleDocTemplate(filename,
@@ -279,11 +278,11 @@ def readCA():
 
 		ca.readline(100) #clear buffer while paused
 
-
 try:
    CAthr = thread.start_new_thread(readCA,())
 except:
    raise Exception("Unable to start readCA thread.")
+
 
 #MATPLOTLIB ACTION HANDLING
 #start cursor, mark for first zoom corner
@@ -347,7 +346,7 @@ def on_motion(event):
 	if zoom[6]:
 		mouseLoc[0], mouseLoc[1] = event.xdata, event.ydata
 
-def animate(i, vPlot, iPlot):
+def animate(i):
 	Vgraph.clear()
 	Igraph.clear()
 
@@ -507,24 +506,23 @@ def animate(i, vPlot, iPlot):
 
 	try:
 		#PLOT
+		alph = 0.7
 		if ahAxes[0]:
-			vPlot.set_data(ampHours[0, :i],voltages[0, :i])
-			iPlot.set_data(ampHours[0, :i],currents[0, :i])
+			Vgraph.plot(ampHours,voltages,"b", alpha = alph)
+			Igraph.plot(ampHours,currents,"r", alpha = alph)
 		else:
-			vPlot.set_data(times[0, :i],voltages[0, :i])
-			iPlot.set_data(times[0, :i],currents[0, :i])
+			Vgraph.plot(times,voltages,"b", alpha = alph)
+			Igraph.plot(times,currents,"r", alpha = alph)
 	except:
 		"Try again"
-	return vPlot, iPlot
 
-vPlot, = Vgraph.plot(times,voltages,"b-",alpha = .7)
-iPlot, = Igraph.plot([],currents,"r-",alpha = .7)
+		
 cid = fig.canvas.mpl_connect('button_press_event', on_press)
 cid = fig.canvas.mpl_connect('button_release_event', on_release)
 cid = fig.canvas.mpl_connect('key_press_event', on_key)
 cid = fig.canvas.mpl_connect('motion_notify_event', on_motion)
 cid = fig.canvas.mpl_connect('key_release_event', on_key_release)
-ani = animation.FuncAnimation(fig, animate, interval = 20, fargs = (vPlot,iPlot))
+ani = animation.FuncAnimation(fig, animate, interval = 10)
 plt.show()
 f.close()
 os.system("del \"" + serialNumber + ".txt\" \"" + serialNumber + ".jpg\"")
