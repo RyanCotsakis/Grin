@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 import matplotlib.animation as animation
+import matplotlib as mpl
 import reportlab.platypus as plat
-import numpy as np
 import serial
 import sys
 import os
@@ -29,7 +28,6 @@ interactive plots.
 
 Author: Ryan Cotsakis, GRIN TECH
 
-http://stackoverflow.com/questions/29277080/efficient-matplotlib-redrawing
 """
 
 def pdf(filename, serialNumber, load, capacity, cutoffVoltage):
@@ -82,6 +80,7 @@ def CA_Reader(conn, COM, serialNumber):
 	IscaleJump = 1
 	timeOut = 30 #seconds until program automatically pauses
 	header_string = "Time\t\tV\t\tA\t\tWh\t\tAh\tCA_Ah"
+	maxFreq = .9 #number of seconds between data points
 
 	#lists
 	voltages = []
@@ -97,7 +96,6 @@ def CA_Reader(conn, COM, serialNumber):
 	mouseLoc = [0,0] #x,y of mouse location when held click
 	scroll = [False,False,False,False,0] #up, down, left, right being held; time when pushed
 	ahAxes = [False] #amp hour axes? Or time axes?
-	updated = [False] #new data to plot
 
 	try:
 		ca = serial.Serial(
@@ -120,14 +118,10 @@ def CA_Reader(conn, COM, serialNumber):
 	ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
 
 	#matplotlib
-	plt.ion()
 	fig = plt.figure(serialNumber)
 	Vgraph = fig.add_subplot(111)
 	Igraph = Vgraph.twinx()
-	vPlot, = Vgraph.plot([],[],"b")
-	iPlot, = Igraph.plot([],[],"r")
 
-	#calibrate time
 	startTime = [time.time()] #start time at 0, global modifiable variable (not actually a list)
 
 	#BUTTONS
@@ -197,22 +191,31 @@ def CA_Reader(conn, COM, serialNumber):
 		zoom[2], zoom[3] = zoom[0], zoom[1]
 		zoom[6] = False
 	bxaxis = mpl.widgets.Button(plt.axes([0.63,0.02,0.2,0.04]),"Change to Ah")
-	bxaxis.on_clicked(xaxis)		
+	bxaxis.on_clicked(xaxis)
+
+
+	def startFile():
+		global f
+		f = open(serialNumber + ".txt",'w')
+		f.write(header_string + "\n")
+		return f
 
 	def timeOutProcess():
 		paused[0] = True
 		paused[1] = time.time() - timeOut
 		conn.send(["Timed Out"])
 
-	def readCA(iPlot, vPlot):
+	def readCA():
 
-		global f
-		f = open(serialNumber + ".txt",'w')
-		f.write(header_string + "\n")
+		f = startFile()
+		prevTime = time.time()
 
 		while True:
-			thisTime = time.time()
-			while not paused[0]: #read data
+			try:
+				thisTime = time.time()
+			except:
+				break
+			while not paused[0] and thisTime - prevTime >= maxFreq: #read data
 				line = ca.readline(100)
 				values = line.split()
 
@@ -238,10 +241,7 @@ def CA_Reader(conn, COM, serialNumber):
 					else:
 						string = "%02i:%04.1f\t" %(mins,secs)
 					string += "\t%.2f\t\t%.2f\t\t%.1f\t\t%.2f\t%.2f" %(voltage,current,wattHours[length-1],ampHours[length-1],CAah)
-					try:
-						conn.send(["Active", string])
-					except:
-						break
+					conn.send(["Active", string])
 					try:
 						f.write(string + "\n")
 						f.flush()
@@ -264,15 +264,18 @@ def CA_Reader(conn, COM, serialNumber):
 					voltages.append(voltage)
 					currents.append(current)
 					prevTime = thisTime
-					updated[0] = True
+
+					Vgraph.clear()
+					Igraph.clear()
+					Vgraph.draw()
+					Igraph.draw()
 				except:
 					break
 
-			time.sleep(.1)
 			ca.readline(100) #clear buffer while paused
 
 	try:
-	   CAthr = thread.start_new_thread(readCA,(iPlot, vPlot))
+	   CAthr = thread.start_new_thread(readCA,())
 	except:
 	   raise Exception("Unable to start readCA thread.")
 
@@ -339,14 +342,8 @@ def CA_Reader(conn, COM, serialNumber):
 		if zoom[6]:
 			mouseLoc[0], mouseLoc[1] = event.xdata, event.ydata
 
-	#event handling:
-	cid = fig.canvas.mpl_connect('button_press_event', on_press)
-	cid = fig.canvas.mpl_connect('button_release_event', on_release)
-	cid = fig.canvas.mpl_connect('key_press_event', on_key)
-	cid = fig.canvas.mpl_connect('motion_notify_event', on_motion)
-	cid = fig.canvas.mpl_connect('key_release_event', on_key_release)
-
 	def animate(i):
+
 		thisTime = time.time()
 		#axes labels
 		if not paused[0]:
@@ -391,7 +388,7 @@ def CA_Reader(conn, COM, serialNumber):
 						numInBetween+=1
 					if t > tmax:
 						break
-			movement = len(times)//60+1
+			movement = numInBetween//60+1
 			if scroll[2] and cursorIndex[0]-movement >= 0:
 				cursorIndex[0] -= movement
 			elif scroll[3] and cursorIndex[0]+movement < len(times):
@@ -425,7 +422,7 @@ def CA_Reader(conn, COM, serialNumber):
 				elif ampHours[cursorIndex[0]] < tmin:
 					zoom[0] -= horiMove
 					zoom[2] -= horiMove
-		
+			
 		#default zoom or modified zoom?
 		if zoom[0] == zoom[2] or zoom[1] == zoom[3]:
 			Vmin = 0
@@ -446,7 +443,6 @@ def CA_Reader(conn, COM, serialNumber):
 			else:
 				Vgraph.set_ylim([0,VscaleJump])
 				Igraph.set_ylim([0,IscaleJump])
-
 		else:
 			#commit zoomed axes
 			y1 = (zoom[1]-Imin)*(Vmax-Vmin)/(Imax-Imin)+Vmin
@@ -496,27 +492,24 @@ def CA_Reader(conn, COM, serialNumber):
 			oldHori, = Igraph.plot([zoom[4],mouseLoc[0]],[zoom[5],zoom[5]],boxType) #old hori
 			newVert, = Igraph.plot([mouseLoc[0],mouseLoc[0]],[zoom[5],mouseLoc[1]],boxType) #new vert
 			newHori, = Igraph.plot([zoom[4],mouseLoc[0]],[mouseLoc[1],mouseLoc[1]],boxType) #new hori
-
 		#timeOut
 		if length > 0 and thisTime - startTime[0] >= times[length-1]*60 + timeOut and not paused[0]:
 			timeOutProcess()
 
-
-		#update plots
-		if updated[0]:
+		try:
+			#PLOT
+			alph = 0.7
 			if ahAxes[0]:
-				vPlot.set_data(np.array(ampHours),np.array(voltages))
-				iPlot.set_data(np.array(ampHours),np.array(currents))
+				Vgraph.plot(ampHours,voltages,"b", alpha = alph)
+				Igraph.plot(ampHours,currents,"r", alpha = alph)
 			else:
-				vPlot.set_data(np.array(times),np.array(voltages))
-				iPlot.set_data(np.array(times),np.array(currents))
+				Vgraph.plot(times,voltages,"b", alpha = alph)
+				Igraph.plot(times,currents,"r", alpha = alph)
+		except:
+			"Try again"
 			
-			updated[0] = False
-
-		plt.draw()
 		Vgraph.clear()
 		Igraph.clear()
-		time.sleep(.1)
 
 		default = (bpause.label, bxaxis.label)
 		if length == 0:
@@ -530,10 +523,19 @@ def CA_Reader(conn, COM, serialNumber):
 				return default + longer + cursor + (oldVert, oldHori, newVert, newHori)
 		return default + longer
 
-	anim = animation.FuncAnimation(fig, animate, interval=20, blit=True)
+
+			
+	cid = fig.canvas.mpl_connect('button_press_event', on_press)
+	cid = fig.canvas.mpl_connect('button_release_event', on_release)
+	cid = fig.canvas.mpl_connect('key_press_event', on_key)
+	cid = fig.canvas.mpl_connect('motion_notify_event', on_motion)
+	cid = fig.canvas.mpl_connect('key_release_event', on_key_release)
+	ani = animation.FuncAnimation(fig, animate, interval = 10, blit = True)
 	plt.show()
 	conn.send(["Closed"])
+	f.close()
 	os.system("del \"" + serialNumber + ".txt\" \"" + serialNumber + ".jpg\"")
+	time.sleep(1) #to give the pipe time to communicate
 
 
 
@@ -567,14 +569,13 @@ class UserInterface(Frame):
 
 		Button(text = "Launch Test", command = self.start).grid(row = 0, column = 2, rowspan = 2)
 
-		padding = 20
 		Label(text = "Processes:").grid(row = 2, column = 0, columnspan = 5)
-		Label(text = "Serial").grid(row = 3, column = 0, padx = padding)
-		Label(text = "Elapsed").grid(row = 3, column = 1, padx = padding)
-		Label(text = "Amp-Hours").grid(row = 3, column = 2, padx = padding)
-		Label(text = "Voltage").grid(row = 3, column = 3, padx = padding)
-		Label(text = "Current").grid(row = 3, column = 4, padx = padding)
-		Label(text = "Status").grid(row = 3, column = 5, padx = padding)
+		Label(text = "Serial").grid(row = 3, column = 0)
+		Label(text = "Elapsed").grid(row = 3, column = 1)
+		Label(text = "Amp-Hours").grid(row = 3, column = 2)
+		Label(text = "Voltage").grid(row = 3, column = 3)
+		Label(text = "Current").grid(row = 3, column = 4)
+		Label(text = "Status").grid(row = 3, column = 5)
 
 
 
@@ -668,6 +669,6 @@ class UserInterface(Frame):
 
 if __name__ == '__main__':
 	root = Tk()
-	root.geometry("580x300+100+100")
+	root.geometry("500x300+100+100")
 	UserInterface(root)
 	root.mainloop()
