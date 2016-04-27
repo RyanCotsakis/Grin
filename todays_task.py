@@ -10,15 +10,20 @@ import sys
 
 plt.ion()
 fig, ax = plt.subplots()
-ax.plot([1.1,2.2],[1,2])
+vPlot, = ax.plot([1.1,2.2],[1,2])
 
 def update():
+	l, = ax.plot([1,2],[1,2],color = 'r')
+	hello = ax.annotate("hello", xy = (.5,.5), xycoords = "axes fraction")
 	while True:
 		ymin, ymax = ax.get_ylim()
 		print ymax
 		sys.stdout.flush()
 		ax.set_ylim([ymin - .5, ymax + .5])
-		time.sleep(2)
+		vPlot.set_data([1.1,2.2],[1,ymax])
+		l.set_data([2,2.1],[ymin,ymax])
+		time.sleep(.2)
+		hello.set_text("yo")
 
 try:
    upthr = threading.Thread(target = update)
