@@ -1,9 +1,4 @@
-"""
-A simple example of an animated plot
-"""
-import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import threading
 import time
 import sys
@@ -13,17 +8,19 @@ fig, ax = plt.subplots()
 vPlot, = ax.plot([1.1,2.2],[1,2])
 
 def update():
-	l, = ax.plot([1,2],[1,2],color = 'r')
-	hello = ax.annotate("hello", xy = (.5,.5), xycoords = "axes fraction")
+	ymin, ymax = 0,3
+	count = 0
 	while True:
-		ymin, ymax = ax.get_ylim()
-		print ymax
+		print count
 		sys.stdout.flush()
-		ax.set_ylim([ymin - .5, ymax + .5])
-		vPlot.set_data([1.1,2.2],[1,ymax])
-		l.set_data([2,2.1],[ymin,ymax])
-		time.sleep(.2)
-		hello.set_text("yo")
+
+		ax.set_ylim([ymin - count, ymax + count]) #zoom out -- this is the line that causes problems
+
+		time.sleep(.1) #decrease this to .01 and it'll throw the error
+		count += 1
+
+		if count > 10000:
+			break
 
 try:
    upthr = threading.Thread(target = update)
@@ -31,8 +28,5 @@ try:
 except:
    raise Exception("Unable to start update thread.")
 
-plt.show(block = True)
 
-#not accessible:
-ani = animation.FuncAnimation(fig, animate, np.arange(1, 200), init_func=init,
-    interval=25, blit=True)
+plt.show(block = True)

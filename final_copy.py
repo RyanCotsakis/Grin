@@ -97,7 +97,7 @@ def CA_Reader(conn, COM, serialNumber):
 	#modifiable global vars. animate() can only access changes to lists.
 	paused = [False,0] #bool, time when paused was initiated
 	cursorIndex = [-1] #-1 if no cursor
-	zoom = [0,0,0,0,0,0,False] #0: x1; 1: y1; 2: x2; 3: y2; 4: xclicked; 5: yclicked; 6: clicked?
+	zoom = [0,0,0,0,0,0,False,False] #0: x1; 1: y1; 2: x2; 3: y2; 4: xclicked; 5: yclicked; 6: clicked? 7: update zoom?
 	mouseLoc = [0,0] #x,y of mouse location when held click
 	scroll = [False,False,False,False,0] #up, down, left, right being held; time when pushed
 	ahAxes = [False] #amp hour axes? Or time axes?
@@ -129,6 +129,8 @@ def CA_Reader(conn, COM, serialNumber):
 	fig = plt.figure(serialNumber)
 	Vgraph = fig.add_subplot(111)
 	Igraph = Vgraph.twinx()
+	Vgraph.set_ylabel("Voltage (V)", color = "b")
+	Igraph.set_ylabel("Current (A)", color = "r")
 
 
 	# --- PLOT FUNCTIONS ---
@@ -246,6 +248,7 @@ def CA_Reader(conn, COM, serialNumber):
 				zoom[0],zoom[1] = zoom[4],zoom[5]
 				zoom[2],zoom[3] = x,y
 		zoom[6] = False
+		zoom[7] = True
 
 	def on_key(event):
 		Imin, Imax = Igraph.get_ylim()
@@ -321,12 +324,12 @@ def CA_Reader(conn, COM, serialNumber):
 					else:
 						string = "%02i:%04.1f\t" %(mins,secs)
 					string += "\t%.2f\t\t%.2f\t\t%.1f\t\t%.2f\t%.2f" %(voltage,current,wattHours[length-1],ampHours[length-1],CAah)
-					conn.send(["Active", string])
 					try:
-						f.write(string + "\n")
-						f.flush()
+						conn.send(["Active", string])
 					except:
-						break
+						return
+					f.write(string + "\n")
+					f.flush()
 
 				#plot
 				try:
@@ -344,19 +347,45 @@ def CA_Reader(conn, COM, serialNumber):
 					voltages.append(voltage)
 					currents.append(current)
 					prevTime = thisTime
-
-					#matplotlib
-
-					changePlot.acquire()
-					if ahAxes[0]:
-						vPlot.set_data(ampHours,voltages)
-						iPlot.set_data(ampHours,currents)
-					else:
-						vPlot.set_data(times,voltages)
-						iPlot.set_data(times,currents)
-					changePlot.release()
 				except:
 					break
+
+				#matplotlib
+
+				changePlot.acquire()
+
+				if ahAxes[0]:
+					vPlot.set_data(ampHours,voltages)
+					iPlot.set_data(ampHours,currents)
+				else:
+					vPlot.set_data(times,voltages)
+					iPlot.set_data(times,currents)
+
+				#default zoom
+				if zoom[0] == zoom[2] or zoom[1] == zoom[3]:
+					Vmin = 0
+					Imin = 0
+					if len(currents) > 0:
+						Vmax = VscaleJump*((max(voltages)+VscaleJump/2)//VscaleJump+1)
+						cur_max = max(currents)
+					else:
+						Vmax = VscaleJump
+						cur_max = 0
+					if cur_max > 0:
+						Imax = IscaleJump*((cur_max+IscaleJump/2)//IscaleJump+1)
+					else:
+						Imax = IscaleJump
+					if len(times) > 0:
+						Vgraph.set_ylim([Vmin,Vmax])
+						Igraph.set_ylim([Imin,Imax])
+					else:
+						Vgraph.set_ylim([0,VscaleJump])
+						Igraph.set_ylim([0,IscaleJump])
+
+					if mins == 0:
+						Vgraph.set_xlim([0,1])
+
+				changePlot.release()
 
 			ca.readline(100) #clear buffer while paused
 
@@ -400,12 +429,6 @@ def CA_Reader(conn, COM, serialNumber):
 			if not ahAxes[0]:
 				if elapsed <= hourSwitch:
 					timeUnit = "mins"
-					if elapsed < 1 and (zoom[0] == zoom[2] or zoom[1] == zoom[3]):
-						try:
-							Vgraph.set_xlim([0,1])
-						except:
-							print "failure1"
-							sys.stdout.flush()
 				else:
 					timeUnit = "h"
 					newLabels = ["%0.1f" %(number/60) for number in Vgraph.get_xticks()]
@@ -413,8 +436,6 @@ def CA_Reader(conn, COM, serialNumber):
 				Vgraph.set_xlabel("Time (" + timeUnit +")")
 			else:
 				Vgraph.set_xlabel("Amp Hours")
-			Vgraph.set_ylabel("Voltage (V)", color = "b")
-			Igraph.set_ylabel("Current (A)", color = "r")
 
 			#AXES LIMITS:
 			changePlot.acquire()
@@ -473,38 +494,19 @@ def CA_Reader(conn, COM, serialNumber):
 					elif ampHours[cursorIndex[0]] < tmin:
 						zoom[0] -= horiMove
 						zoom[2] -= horiMove
-				
-			#default zoom or modified zoom?
-			try:
-				if zoom[0] == zoom[2] or zoom[1] == zoom[3]:
-					Vmin = 0
-					Imin = 0
-					if len(currents) > 0:
-						Vmax = VscaleJump*((max(voltages)+VscaleJump/2)//VscaleJump+1)
-						cur_max = max(currents)
-					else:
-						Vmax = VscaleJump
-						cur_max = 0
-					if cur_max > 0:
-						Imax = IscaleJump*((cur_max+IscaleJump/2)//IscaleJump+1)
-					else:
-						Imax = IscaleJump
-					if len(times) > 0:
-						Vgraph.set_ylim([Vmin,Vmax])
-						Igraph.set_ylim([Imin,Imax])
-					else:
-						Vgraph.set_ylim([0,VscaleJump])
-						Igraph.set_ylim([0,IscaleJump])
-				else:
-					#commit zoomed axes
-					y1 = (zoom[1]-Imin)*(Vmax-Vmin)/(Imax-Imin)+Vmin
-					y2 = (zoom[3]-Imin)*(Vmax-Vmin)/(Imax-Imin)+Vmin
-					Vgraph.set_ylim([min([y1,y2]),max(y1,y2)])
-					Igraph.set_ylim([min([zoom[1],zoom[3]]),max(zoom[1],zoom[3])])
-					Vgraph.set_xlim([min([zoom[0],zoom[2]]),max(zoom[0],zoom[2])])
-			except:
-				print "failure2"
-				sys.stdout.flush()
+
+			#zoom to zoom window
+			if zoom[7] and not (zoom[0] == zoom[2] or zoom[1] == zoom[3]):
+
+				#commit zoomed axes
+				y1 = (zoom[1]-Imin)*(Vmax-Vmin)/(Imax-Imin)+Vmin
+				y2 = (zoom[3]-Imin)*(Vmax-Vmin)/(Imax-Imin)+Vmin
+				changePlot.acquire()
+				Vgraph.set_ylim([min([y1,y2]),max(y1,y2)])
+				Igraph.set_ylim([min([zoom[1],zoom[3]]),max(zoom[1],zoom[3])])
+				Vgraph.set_xlim([min([zoom[0],zoom[2]]),max(zoom[0],zoom[2])])
+				changePlot.release()
+				zoom[7] = False
 
 			#pause/play
 			if paused[0]:
@@ -562,12 +564,13 @@ def CA_Reader(conn, COM, serialNumber):
 				newVert.set_data([mouseLoc[0],mouseLoc[0]],[zoom[5],mouseLoc[1]]) #new vert
 				newHori.set_data([zoom[4],mouseLoc[0]],[mouseLoc[1],mouseLoc[1]]) #new hori
 
+
 			#timeOut
 			if length > 0 and thisTime - startTime[0] >= times[length-1]*60 + timeOut and not paused[0]:
 				timeOutProcess()
 
 			#sleep for x ms
-			x = 30
+			x = 10
 			time.sleep(x/1000)
 
 			
