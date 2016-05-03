@@ -85,7 +85,6 @@ def CA_Reader(conn, COM, serialNumber):
 	IscaleJump = 1
 	timeOut = 30 #seconds until program automatically pauses
 	header_string = "Time\t\tV\t\tA\t\tWh\t\tAh\tCA_Ah"
-	maxFreq = .9 #number of seconds between data points
 
 	#lists
 	voltages = []
@@ -281,7 +280,8 @@ def CA_Reader(conn, COM, serialNumber):
 			mouseLoc[0], mouseLoc[1] = event.xdata, event.ydata
 
 
-
+	def changeLim(): #if there is no sleep between changes in the axes limits, there will be an error thrown.
+		time.sleep(.1)
 
 	# --- THREAD THAT UPDATES WHEN DATA RECEIVED ---
 
@@ -298,7 +298,7 @@ def CA_Reader(conn, COM, serialNumber):
 				thisTime = time.time()
 			except:
 				break
-			while not paused[0] and thisTime - prevTime >= maxFreq: #read data
+			while not paused[0]: #read data
 				line = ca.readline(100)
 				values = line.split()
 
@@ -352,14 +352,16 @@ def CA_Reader(conn, COM, serialNumber):
 
 				#matplotlib
 
-				changePlot.acquire()
-
 				if ahAxes[0]:
+					changePlot.acquire()
 					vPlot.set_data(ampHours,voltages)
 					iPlot.set_data(ampHours,currents)
+					changePlot.release()
 				else:
+					changePlot.acquire()
 					vPlot.set_data(times,voltages)
 					iPlot.set_data(times,currents)
+					changePlot.release()
 
 				#default zoom
 				if zoom[0] == zoom[2] or zoom[1] == zoom[3]:
@@ -376,16 +378,29 @@ def CA_Reader(conn, COM, serialNumber):
 					else:
 						Imax = IscaleJump
 					if len(times) > 0:
+						changeLim()
+						changePlot.acquire()
 						Vgraph.set_ylim([Vmin,Vmax])
+						changePlot.release()
+						changeLim()
+						changePlot.acquire()
 						Igraph.set_ylim([Imin,Imax])
+						changePlot.release()
 					else:
+						changeLim()
+						changePlot.acquire()
 						Vgraph.set_ylim([0,VscaleJump])
+						changePlot.release()
+						changeLim()
+						changePlot.acquire()
 						Igraph.set_ylim([0,IscaleJump])
+						changePlot.release()
 
 					if mins == 0:
+						changeLim()
+						changePlot.acquire()
 						Vgraph.set_xlim([0,1])
-
-				changePlot.release()
+						changePlot.release()
 
 			ca.readline(100) #clear buffer while paused
 
@@ -501,11 +516,12 @@ def CA_Reader(conn, COM, serialNumber):
 				#commit zoomed axes
 				y1 = (zoom[1]-Imin)*(Vmax-Vmin)/(Imax-Imin)+Vmin
 				y2 = (zoom[3]-Imin)*(Vmax-Vmin)/(Imax-Imin)+Vmin
-				changePlot.acquire()
+				changeLim()
 				Vgraph.set_ylim([min([y1,y2]),max(y1,y2)])
+				changeLim()
 				Igraph.set_ylim([min([zoom[1],zoom[3]]),max(zoom[1],zoom[3])])
+				changeLim()
 				Vgraph.set_xlim([min([zoom[0],zoom[2]]),max(zoom[0],zoom[2])])
-				changePlot.release()
 				zoom[7] = False
 
 			#pause/play
@@ -520,23 +536,23 @@ def CA_Reader(conn, COM, serialNumber):
 			else:
 				bxaxis.label.set_text("Change to Ah")
 
-			#PUT THAT STUFF ON THAT GRAPH!!
 			length = len(times)
 			condition = not cursorIndex[0] == -1
+
+			#PUT THAT STUFF ON THAT GRAPH!!
 			bdot.set_visible(condition)
 			rdot.set_visible(condition)
 			legTit.set_visible(condition)
-			curLine.set_visible(condition)
 			legTime.set_visible(condition)
 			legVol.set_visible(condition)
 			legCur.set_visible(condition)
+			curLine.set_visible(condition)
 			legWh.set_visible(condition)
 			legAh.set_visible(condition)
 			oldVert.set_visible(zoom[6])
 			oldHori.set_visible(zoom[6])
 			newVert.set_visible(zoom[6])
 			newHori.set_visible(zoom[6])
-
 
 			if length > 0:
 				volAn.set_text("V: %.2fV" %voltages[length-1])
@@ -570,7 +586,7 @@ def CA_Reader(conn, COM, serialNumber):
 				timeOutProcess()
 
 			#sleep for x ms
-			x = 10
+			x = 30
 			time.sleep(x/1000)
 
 			
@@ -601,8 +617,6 @@ def CA_Reader(conn, COM, serialNumber):
 	conn.send(["Closed"])
 	f.close()
 	os.system("del \"" + serialNumber + ".txt\" \"" + serialNumber + ".jpg\"")
-	time.sleep(1) #to give the pipe time to communicate
-
 
 # --- USER INTERFACE, MAIN PROCESS ---
 
