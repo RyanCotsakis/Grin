@@ -238,10 +238,6 @@ def CA_Reader(conn, COM, serialNumber):
 		prevTime = time.time()
 
 		while True:
-			try: #wasnt working for me sometimes. I dont think the try catch is necessary.
-				thisTime = time.time()
-			except:
-				break
 			while not paused[0]: #read data
 				line = ca.readline(100) #100 bytes
 				values = line.split()
@@ -250,7 +246,8 @@ def CA_Reader(conn, COM, serialNumber):
 					CAah = float(values[0])
 					voltage = float(values[1])
 					current = float(values[2])
-					elapsed = time.time()-startTime[0] # calculating time.time() frequently for accuracy
+					thisTime = time.time()
+					elapsed = thisTime-startTime[0]
 				except: #the elements in the line read could not be cast to floats.
 					break
 				
